@@ -8,7 +8,7 @@ use nom::{
         is_alphabetic, is_newline, is_space,
     },
     combinator::{map, map_res},
-    multi::fold_many0,
+    multi::{self, fold_many0},
     sequence, IResult,
 };
 use strum::IntoEnumIterator;
@@ -78,7 +78,11 @@ impl Context {
     }
 
     fn add_player(&mut self, ident: char, player: Player) -> bool {
-        self.player_defs.insert(ident, player).is_some()
+        self.player_defs.insert(ident, player).is_none()
+    }
+
+    fn get_player(&self, ident: char) -> Option<&Player> {
+        self.player_defs.get(&ident)
     }
 }
 
@@ -171,16 +175,25 @@ fn player_def(s: &str) -> IResult<&str, Player> {
     )(s)
 }
 
-// let mut ctx = ctx.deref().borrow_mut();
-// match ctx.add_player(
-//     ident,
-//     Player::new(ident)
-//         .with_strength(strength)
-//         .with_skills(skills),
-// ) {
-//     true => Ok(()),
-//     false => Err(nom::error::ErrorKind::Fail),
-// }
+fn parse_complete_field(ctx: Rc<RefCell<Context>>) -> impl Fn(&str) -> IResult<&str, ()> {
+    move |s| {
+        map(multi::many0(sequence::tuple((player_def, newline))), |_| ())(s)
+
+        // fold_many0( player_def)
+        //  sequence::tuple(( player_def(ctx.clone()), newline))
+
+        // let x = player_def(s)?;
+
+        // let mut ctx = ctx.deref().borrow_mut();
+        // match ctx.add_player(x.1.ident(), x.1) {
+        //     true => Ok((x.0, ())),
+        //     false => Err(nom::Err::Failure(nom::error::Error::new(
+        //         x.0,
+        //         nom::error::ErrorKind::Fail,
+        //     ))),
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -257,5 +270,7 @@ mod tests {
         player_def("a: 4 guard fend block").expect("hey!");
 
         let ctx = Rc::new(RefCell::new(Context::new()));
+        parse_player_def(ctx.clone())("a: 4 guard fend block").expect("hey!");
+        ctx.borrow().get_player('a').expect("exists");
     }
 }
