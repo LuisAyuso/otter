@@ -4,10 +4,11 @@ use nom::{
     branch::alt,
     bytes::complete::{tag, take_while},
     character::{
-        complete::{alpha1, anychar, char, digit1, newline, space0, space1},
+        complete::{anychar, char, digit1, newline, space0, space1},
         is_alphabetic, is_newline, is_space,
     },
     combinator::{map, map_res},
+    multi::fold_many0,
     sequence, IResult,
 };
 use strum::IntoEnumIterator;
@@ -45,6 +46,9 @@ impl Player {
                 skills: s,
             }
         }
+    }
+    pub fn ident(&self) -> char {
+        self.ident
     }
 }
 
@@ -137,17 +141,18 @@ fn skill(s: &str) -> IResult<&str, Skill> {
 }
 
 fn strength(s: &str) -> IResult<&str, u8> {
-    map_res(digit1, |s: &str| {
-        s.parse::<u8>()
-        // .map_err(|_| nom::error::ErrorKind::Fail)
-    })(s)
+    map_res(digit1, |s: &str| s.parse::<u8>())(s)
 }
 
 fn skill_set(s: &str) -> IResult<&str, Vec<Skill>> {
-    map_res(digit1, |s: &str| {
-        s.parse::<u8>()
-        // .map_err(|_| nom::error::ErrorKind::Fail)
-    })(s)
+    fold_many0(
+        sequence::tuple((space0, skill)),
+        Vec::new,
+        |mut acc: Vec<Skill>, item| {
+            acc.push(item.1);
+            acc
+        },
+    )(s)
 }
 
 /**
@@ -155,24 +160,27 @@ fn skill_set(s: &str) -> IResult<&str, Vec<Skill>> {
  * a: 4 guard fend block
  * b: 3
  */
-fn player_def(ctx: Rc<RefCell<Context>>) -> impl Fn(&str) -> IResult<&str, ()> {
-    move |s| {
-        map_res(
-            sequence::terminated(
-                sequence::tuple((anychar, space0, tag(":"), space1, strength)),
-                newline,
-            ),
-            |(ident, _, _, _, strength): (char, &str, &str, &str, u8)| {
-                let mut ctx = ctx.deref().borrow_mut();
-                match ctx.add_player(ident, Player::new(ident).with_strength(strength)) {
-                    true => Ok(()),
-                    false => Err(nom::error::ErrorKind::Fail),
-                }
-            },
-        )(s)
-    }
+fn player_def(s: &str) -> IResult<&str, Player> {
+    map(
+        sequence::tuple((anychar, space0, tag(":"), space1, strength, skill_set)),
+        |(ident, _, _, _, strength, skills): (char, _, _, _, u8, Vec<Skill>)| {
+            Player::new(ident)
+                .with_strength(strength)
+                .with_skills(skills)
+        },
+    )(s)
 }
 
+// let mut ctx = ctx.deref().borrow_mut();
+// match ctx.add_player(
+//     ident,
+//     Player::new(ident)
+//         .with_strength(strength)
+//         .with_skills(skills),
+// ) {
+//     true => Ok(()),
+//     false => Err(nom::error::ErrorKind::Fail),
+// }
 #[cfg(test)]
 mod tests {
 
@@ -231,11 +239,23 @@ mod tests {
 
         field(half_field).expect("ok");
 
-        let ctx = Rc::new(RefCell::new(Context::new()));
-
         assert_eq!(skill("block"), Ok(("", Skill::Block)));
         assert_eq!(skill("Block"), Ok(("", Skill::Block)));
         assert_eq!(skill("Dodge"), Ok(("", Skill::Dodge)));
         assert_eq!(skill("Dodge "), Ok((" ", Skill::Dodge)));
+
+        assert_eq!(skill_set(""), Ok(("", vec![])));
+        assert_eq!(skill_set(" "), Ok((" ", vec![])));
+
+        assert_eq!(
+            skill_set("Dodge Block Accurate"),
+            Ok(("", vec![Skill::Dodge, Skill::Block, Skill::Accurate]))
+        );
+
+        player_def("a: 3").expect("parses");
+        player_def("a: 3 Block").expect("parses");
+        player_def("a: 4 guard fend block").expect("hey!");
+
+        let ctx = Rc::new(RefCell::new(Context::new()));
     }
 }
