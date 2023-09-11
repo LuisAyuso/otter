@@ -185,8 +185,15 @@ fn parse_complete_field<'a>(
 pub fn from_file(path: &std::path::Path) -> anyhow::Result<HalfField> {
     let s = std::fs::read_to_string(path).context("failed to read file")?;
     let ctx = Rc::new(RefCell::new(ParseContext::new()));
-    let (_, hf) = parse_complete_field(ctx)(s.as_str()).context("failed to parse file")?;
-    Ok(hf)
+    let x = match parse_complete_field(ctx)(s.as_str()) {
+        Ok((_, hf)) => Ok(hf),
+        Err(_) => {
+            // Here is a good place to print diagnosis, but we can not return further
+            // because error reporting original string lifetime is bound to string.
+            anyhow::bail!("compilation failed")
+        }
+    };
+    x
 }
 
 #[cfg(test)]

@@ -1,11 +1,15 @@
+use std::any;
+
+use anyhow::Context;
 use clap::{value_parser, Arg, Command};
+use parser::from_file;
 
 mod model;
 mod parser;
 mod skills;
 mod solver;
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     let matches = Command::new("MyApp")
         .arg(
             Arg::new("input")
@@ -18,5 +22,7 @@ fn main() {
         )
         .get_matches(); // builds the instance of ArgMatches
 
-    let _x: &String = matches.get_one("input").unwrap();
+    let x: &String = matches.get_one("input").context("no argument")?;
+    from_file(std::path::Path::new(x.as_str()))?;
+    Ok(())
 }
