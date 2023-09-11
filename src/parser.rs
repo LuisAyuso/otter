@@ -1,10 +1,11 @@
-use std::{cell::RefCell, collections::BTreeMap, ops::Deref, rc::Rc};
+use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
 
+use anyhow::Context;
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_while},
     character::{
-        complete::{anychar, char, digit1, newline, space0, space1},
+        complete::{anychar, char, digit1, multispace0, multispace1, newline, space0, space1},
         is_alphabetic, is_newline, is_space,
     },
     combinator::{map, map_res},
@@ -13,72 +14,34 @@ use nom::{
 };
 use strum::IntoEnumIterator;
 
-use crate::skills::Skill;
-
-#[derive(PartialEq, Eq, Debug, Clone)]
-struct Player {
-    ident: char,
-    strength: u8,
-    skills: Vec<Skill>,
-}
-impl Player {
-    pub fn new(ident: char) -> Self {
-        Self {
-            ident,
-            strength: 3,
-            skills: vec![],
-        }
-    }
-    pub fn with_strength(self, s: u8) -> Self {
-        {
-            Self {
-                ident: self.ident,
-                strength: s,
-                skills: self.skills,
-            }
-        }
-    }
-    pub fn with_skills(self, s: Vec<Skill>) -> Self {
-        {
-            Self {
-                ident: self.ident,
-                strength: self.strength,
-                skills: s,
-            }
-        }
-    }
-    pub fn ident(&self) -> char {
-        self.ident
-    }
-}
-
-#[derive(PartialEq, Eq, Debug, Clone)]
-enum Zone {
-    Empty,
-    Player(Player),
-}
-impl Zone {
-    pub fn new_empty() -> Self {
-        Zone::Empty
-    }
-    pub fn new_player(ident: char) -> Self {
-        Zone::Player(Player::new(ident))
-    }
-}
+use crate::{
+    model::{HalfField, Line, Player, Zone},
+    skills::Skill,
+};
 
 #[derive(Default)]
-struct Context {
+struct ParseContext {
     player_defs: BTreeMap<char, Player>,
 }
-impl Context {
-    fn new() -> Context {
-        Context {
+impl ParseContext {
+    fn new() -> Self {
+        Self {
             ..Default::default()
         }
     }
 
-    fn add_player(&mut self, ident: char, player: Player) -> bool {
-        self.player_defs.insert(ident, player).is_none()
+    fn add_player(&mut self, ident: char, player: Player) -> anyhow::Result<()> {
+        if self.player_defs.insert(ident, player).is_some() {
+            anyhow::bail!("repeated player {}", ident);
+        }
+        Ok(())
+    }
+
+    fn add_players(&mut self, players: Vec<Player>) -> anyhow::Result<()> {
+        for p in players {
+            self.add_player(p.ident(), p)?;
+        }
+        Ok(())
     }
 
     fn get_player(&self, ident: char) -> Option<&Player> {
@@ -86,50 +49,74 @@ impl Context {
     }
 }
 
-type Line = [Zone; 15];
-type HalfField = [Line; 13];
-
-fn zone(s: &str) -> IResult<&str, Zone> {
-    map(alt((char(' '), anychar)), |c| match c {
-        ' ' => Zone::Empty,
-        ident => Zone::new_player(ident),
-    })(s)
+fn zone(ctx: Rc<RefCell<ParseContext>>) -> impl Fn(&str) -> IResult<&str, Zone> {
+    move |s| {
+        map_res(alt((char(' '), anychar)), |c| match c {
+            ' ' => Ok(Zone::Empty),
+            id => match ctx.borrow().get_player(id) {
+                Some(p) => Ok(Zone::Player(p.clone())),
+                None => {
+                    println!("no player {} ", id);
+                    Err(nom::error::ErrorKind::Fail)
+                }
+            },
+        })(s)
+    }
 }
 
-fn field_line(s: &str) -> IResult<&str, Line> {
-    map(
-        sequence::tuple((
-            zone, zone, zone, zone, zone, zone, zone, zone, zone, zone, zone, zone, zone, zone,
-            zone,
-        )),
-        |(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)| {
-            [a, b, c, d, e, f, g, h, i, j, k, l, m, n, o]
-        },
-    )(s)
+fn field_line(ctx: Rc<RefCell<ParseContext>>) -> impl Fn(&str) -> IResult<&str, Line> {
+    move |s| {
+        map(
+            sequence::tuple((
+                zone(ctx.clone()),
+                zone(ctx.clone()),
+                zone(ctx.clone()),
+                zone(ctx.clone()),
+                zone(ctx.clone()),
+                zone(ctx.clone()),
+                zone(ctx.clone()),
+                zone(ctx.clone()),
+                zone(ctx.clone()),
+                zone(ctx.clone()),
+                zone(ctx.clone()),
+                zone(ctx.clone()),
+                zone(ctx.clone()),
+                zone(ctx.clone()),
+                zone(ctx.clone()),
+            )),
+            |(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)| {
+                [a, b, c, d, e, f, g, h, i, j, k, l, m, n, o]
+            },
+        )(s)
+    }
 }
 
-fn field(s: &str) -> IResult<&str, HalfField> {
-    map(
-        sequence::tuple((
-            take_while(|c: char| is_newline(c as u8) || is_space(c as u8)),
-            sequence::terminated(tag("==============="), newline),
-            sequence::terminated(field_line, newline),
-            sequence::terminated(field_line, newline),
-            sequence::terminated(field_line, newline),
-            sequence::terminated(field_line, newline),
-            sequence::terminated(field_line, newline),
-            sequence::terminated(field_line, newline),
-            sequence::terminated(field_line, newline),
-            sequence::terminated(field_line, newline),
-            sequence::terminated(field_line, newline),
-            sequence::terminated(field_line, newline),
-            sequence::terminated(field_line, newline),
-            sequence::terminated(field_line, newline),
-            sequence::terminated(field_line, newline),
-            tag("+++++++++++++++"),
-        )),
-        |(_, _, a, b, c, d, e, f, g, h, i, j, k, l, m, _)| [a, b, c, d, e, f, g, h, i, j, k, l, m],
-    )(s)
+fn half_field(ctx: Rc<RefCell<ParseContext>>) -> impl Fn(&str) -> IResult<&str, HalfField> {
+    move |s| {
+        map(
+            sequence::tuple((
+                take_while(|c: char| is_newline(c as u8) || is_space(c as u8)),
+                sequence::terminated(tag("==============="), newline),
+                sequence::terminated(field_line(ctx.clone()), newline),
+                sequence::terminated(field_line(ctx.clone()), newline),
+                sequence::terminated(field_line(ctx.clone()), newline),
+                sequence::terminated(field_line(ctx.clone()), newline),
+                sequence::terminated(field_line(ctx.clone()), newline),
+                sequence::terminated(field_line(ctx.clone()), newline),
+                sequence::terminated(field_line(ctx.clone()), newline),
+                sequence::terminated(field_line(ctx.clone()), newline),
+                sequence::terminated(field_line(ctx.clone()), newline),
+                sequence::terminated(field_line(ctx.clone()), newline),
+                sequence::terminated(field_line(ctx.clone()), newline),
+                sequence::terminated(field_line(ctx.clone()), newline),
+                sequence::terminated(field_line(ctx.clone()), newline),
+                tag("+++++++++++++++"),
+            )),
+            |(_, _, a, b, c, d, e, f, g, h, i, j, k, l, m, _)| {
+                [a, b, c, d, e, f, g, h, i, j, k, l, m]
+            },
+        )(s)
+    }
 }
 
 fn skill(s: &str) -> IResult<&str, Skill> {
@@ -175,23 +162,31 @@ fn player_def(s: &str) -> IResult<&str, Player> {
     )(s)
 }
 
-fn parse_complete_field(ctx: Rc<RefCell<Context>>) -> impl Fn(&str) -> IResult<&str, ()> {
+fn parse_complete_field<'a>(
+    ctx: Rc<RefCell<ParseContext>>,
+) -> impl Fn(&'a str) -> IResult<&'a str, HalfField> {
     move |s| {
-        map(multi::many0(sequence::tuple((player_def, newline))), |_| ())(s)
+        let (s, _) = multispace0(s)?;
 
-        // fold_many0( player_def)
-        //  sequence::tuple(( player_def(ctx.clone()), newline))
+        let (s, players) = multi::many0(sequence::terminated(player_def, multispace1))(s)?;
+        {
+            let mut ctx = ctx.borrow_mut();
+            ctx.add_players(players).expect("dup player");
+        }
 
-        // let x = player_def(s)?;
+        let (s, _) = multispace0(s)?;
 
-        // let mut ctx = ctx.deref().borrow_mut();
-        // match ctx.add_player(x.1.ident(), x.1) {
-        //     true => Ok((x.0, ())),
-        //     false => Err(nom::Err::Failure(nom::error::Error::new(
-        //         x.0,
-        //         nom::error::ErrorKind::Fail,
-        //     ))),
+        let (s, hf) = half_field(ctx.clone())(s)?;
+
+        Ok((s, hf))
     }
+}
+
+pub fn from_file(path: &std::path::Path) -> anyhow::Result<HalfField> {
+    let s = std::fs::read_to_string(path).context("failed to read file")?;
+    let ctx = Rc::new(RefCell::new(ParseContext::new()));
+    let (_, hf) = parse_complete_field(ctx)(s.as_str()).context("failed to parse file")?;
+    Ok(hf)
 }
 
 #[cfg(test)]
@@ -201,36 +196,12 @@ mod tests {
 
     #[test]
     fn parse() {
-        assert_eq!(zone("abc"), Ok(("bc", Zone::new_player('a'))));
-        assert_eq!(zone("bc"), Ok(("c", Zone::new_player('b'))));
-        assert_eq!(zone("c"), Ok(("", Zone::new_player('c'))));
-        assert_eq!(zone(" c"), Ok(("c", Zone::new_empty())));
+        let ctx = Rc::new(RefCell::new(ParseContext::new()));
+        ctx.borrow_mut()
+            .add_player('a', Player::new('a'))
+            .expect("no dup");
 
-        assert_eq!(
-            field_line(" aaa aaa aaa aa"),
-            Ok((
-                "",
-                [
-                    Zone::new_empty(),
-                    Zone::new_player('a'),
-                    Zone::new_player('a'),
-                    Zone::new_player('a'),
-                    Zone::new_empty(),
-                    Zone::new_player('a'),
-                    Zone::new_player('a'),
-                    Zone::new_player('a'),
-                    Zone::new_empty(),
-                    Zone::new_player('a'),
-                    Zone::new_player('a'),
-                    Zone::new_player('a'),
-                    Zone::new_empty(),
-                    Zone::new_player('a'),
-                    Zone::new_player('a'),
-                ]
-            ))
-        );
-
-        let half_field = r#"
+        let hf = r#"
         
         
 ===============
@@ -250,7 +221,7 @@ mod tests {
 +++++++++++++++
     "#;
 
-        field(half_field).expect("ok");
+        half_field(ctx.clone())(hf).expect("ok");
 
         assert_eq!(skill("block"), Ok(("", Skill::Block)));
         assert_eq!(skill("Block"), Ok(("", Skill::Block)));
@@ -269,8 +240,30 @@ mod tests {
         player_def("a: 3 Block").expect("parses");
         player_def("a: 4 guard fend block").expect("hey!");
 
-        let ctx = Rc::new(RefCell::new(Context::new()));
-        parse_player_def(ctx.clone())("a: 4 guard fend block").expect("hey!");
-        ctx.borrow().get_player('a').expect("exists");
+        let complete_def = r#"
+a: 3 Block        
+b: 4
+        
+===============
+               
+               
+               
+               
+               
+               
+               
+               
+               
+               
+               
+               
+ a     b       
++++++++++++++++
+    "#;
+
+        println!("here we go!");
+
+        let ctx = Rc::new(RefCell::new(ParseContext::new()));
+        parse_complete_field(ctx)(complete_def).expect("rocks!");
     }
 }

@@ -1,5 +1,6 @@
 use clap::{value_parser, Arg, Command};
 
+mod model;
 mod parser;
 mod skills;
 mod solver;
@@ -17,7 +18,5 @@ fn main() {
         )
         .get_matches(); // builds the instance of ArgMatches
 
-    let x: &String = matches.get_one("input").unwrap();
-
-    println!("{}", x);
+    let _x: &String = matches.get_one("input").unwrap();
 }
