@@ -181,11 +181,9 @@ fn parse_complete_field<'a>(
         Ok((s, hf))
     }
 }
-
-pub fn from_file(path: &std::path::Path) -> anyhow::Result<HalfField> {
-    let s = std::fs::read_to_string(path).context("failed to read file")?;
+pub fn from_str(content: &str) -> anyhow::Result<HalfField> {
     let ctx = Rc::new(RefCell::new(ParseContext::new()));
-    let x = match parse_complete_field(ctx)(s.as_str()) {
+    let x = match parse_complete_field(ctx)(content) {
         Ok((_, hf)) => Ok(hf),
         Err(_) => {
             // Here is a good place to print diagnosis, but we can not return further
@@ -194,6 +192,11 @@ pub fn from_file(path: &std::path::Path) -> anyhow::Result<HalfField> {
         }
     };
     x
+}
+
+pub fn from_file(path: &std::path::Path) -> anyhow::Result<HalfField> {
+    let s = std::fs::read_to_string(path).context("failed to read file")?;
+    from_str(&s)
 }
 
 #[cfg(test)]

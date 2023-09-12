@@ -1,7 +1,14 @@
 use crate::skills::Skill;
 
 #[derive(PartialEq, Eq, Debug, Clone)]
+pub enum Team {
+    Defender,
+    Attacker,
+}
+
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub struct Player {
+    team: Team,
     ident: char,
     strength: u8,
     skills: Vec<Skill>,
@@ -9,27 +16,34 @@ pub struct Player {
 impl Player {
     pub fn new(ident: char) -> Self {
         Self {
+            team: Team::Defender,
             ident,
             strength: 3,
             skills: vec![],
         }
     }
     pub fn with_strength(self, s: u8) -> Self {
-        {
-            Self {
-                ident: self.ident,
-                strength: s,
-                skills: self.skills,
-            }
+        Self {
+            team: self.team,
+            ident: self.ident,
+            strength: s,
+            skills: self.skills,
+        }
+    }
+    pub fn with_team(self, team: Team) -> Self {
+        Self {
+            team,
+            ident: self.ident,
+            strength: self.strength,
+            skills: self.skills,
         }
     }
     pub fn with_skills(self, s: Vec<Skill>) -> Self {
-        {
-            Self {
-                ident: self.ident,
-                strength: self.strength,
-                skills: s,
-            }
+        Self {
+            team: self.team,
+            ident: self.ident,
+            strength: self.strength,
+            skills: s,
         }
     }
     pub fn ident(&self) -> char {
@@ -39,6 +53,7 @@ impl Player {
 
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub enum Zone {
+    Out,
     Empty,
     Player(Player),
 }
@@ -72,17 +87,37 @@ impl HalfField {
     pub fn get_line(&self, i: usize) -> &Line {
         &self.0[i]
     }
-    pub fn get_zone(&self, coords: Coords) -> &Zone {
+    pub fn get_zone(&self, coords: &Coords) -> &Zone {
         &self.0[coords.0][coords.1]
+    }
+
+    /**
+     * 0,1,2
+     * 3,x,4
+     * 5,6,7
+     */
+    pub fn get_neighbours(&self, coords: &Coords) -> [Zone; 8] {
+        [
+            Zone::Out,
+            Zone::Out,
+            Zone::Out,
+            Zone::Out,
+            Zone::Out,
+            Zone::Out,
+            Zone::Out,
+            Zone::Out,
+        ]
     }
 }
 
 impl std::fmt::Display for Zone {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Zone::Empty => write!(f, " "),
-            Zone::Player(p) => write!(f, "{}", p.ident()),
+            Zone::Out => {}
+            Zone::Empty => write!(f, " ")?,
+            Zone::Player(p) => write!(f, "{}", p.ident())?,
         }
+        Ok(())
     }
 }
 

@@ -1,4 +1,4 @@
-use crate::model::{Coords, HalfField, HalfFieldLenght, LineWidth, Zone};
+use crate::model::{Coords, HalfField, HalfFieldLenght, LineWidth, Player, Zone};
 
 const ScrimmageLine: usize = HalfFieldLenght - 1;
 
@@ -9,6 +9,18 @@ impl Solution {
     fn new() -> Solution {
         Solution
     }
+}
+
+fn block_odds(attacker: (Player, &Coords), victim_coords: &Coords, hf: &HalfField) -> f32 {
+    let victim = match hf.get_zone(victim_coords) {
+        Zone::Empty => panic!("block target not a player"),
+        Zone::Player(p) => p,
+    };
+
+    // get players tackling attacker
+    
+
+    0.0
 }
 
 /// xxOxx
@@ -31,17 +43,33 @@ fn solve_for_play_1(hf: &HalfField, los: &[Coords]) -> Vec<Solution> {
         .collect()
 }
 
-pub fn solve(hf: &HalfField) {
-    println!("{}", hf.get_line(0)[0]);
-
-    let los: Vec<Coords> = hf
-        .get_line(ScrimmageLine)
+fn get_los(hf: &HalfField) -> Vec<Coords> {
+    hf.get_line(ScrimmageLine)
         .iter()
         .enumerate()
         .filter(|(_, z)| z.is_player())
         .map(|(j, _)| (ScrimmageLine, j))
-        .collect();
+        .collect()
+}
 
+pub fn solve(hf: &HalfField) {
+    println!("{}", hf.get_line(0)[0]);
+    let los = get_los(hf);
     let s = solve_for_play_1(hf, &los);
     println!("{:?}", s);
+}
+
+#[cfg(test)]
+mod tests {
+
+    use crate::parser::from_str;
+
+    use super::*;
+
+    #[test]
+    fn play_1() {
+        let one = include_str!("../demos/one.hf");
+        let hf = from_str(one).expect("past gut");
+        let los = get_los(&hf);
+    }
 }
