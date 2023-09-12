@@ -113,7 +113,7 @@ fn half_field(ctx: Rc<RefCell<ParseContext>>) -> impl Fn(&str) -> IResult<&str, 
                 tag("+++++++++++++++"),
             )),
             |(_, _, a, b, c, d, e, f, g, h, i, j, k, l, m, _)| {
-                [a, b, c, d, e, f, g, h, i, j, k, l, m]
+                HalfField::new([a, b, c, d, e, f, g, h, i, j, k, l, m])
             },
         )(s)
     }

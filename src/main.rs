@@ -1,5 +1,3 @@
-use std::any;
-
 use anyhow::Context;
 use clap::{value_parser, Arg, Command};
 use parser::from_file;
@@ -23,6 +21,9 @@ fn main() -> anyhow::Result<()> {
         .get_matches(); // builds the instance of ArgMatches
 
     let x: &String = matches.get_one("input").context("no argument")?;
-    from_file(std::path::Path::new(x.as_str()))?;
+    let hf = from_file(std::path::Path::new(x.as_str()))?;
+    println!("{}", hf);
+    solver::solve(&hf);
+
     Ok(())
 }
