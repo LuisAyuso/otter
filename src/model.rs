@@ -1,9 +1,18 @@
 use crate::skills::Skill;
 
-#[derive(PartialEq, Eq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum Team {
     Defender,
     Attacker,
+}
+
+impl Team {
+    pub fn opposite(&self) -> Self {
+        match self {
+            Self::Attacker => Self::Defender,
+            Self::Defender => Self::Attacker,
+        }
+    }
 }
 
 #[derive(PartialEq, Eq, Debug, Clone)]
@@ -46,8 +55,18 @@ impl Player {
             skills: s,
         }
     }
+
     pub fn ident(&self) -> char {
         self.ident
+    }
+    pub fn strength(&self) -> u8 {
+        self.strength
+    }
+    pub fn team(&self) -> Team {
+        self.team
+    }
+    pub fn skills(&self) -> &[Skill] {
+        &self.skills
     }
 }
 
@@ -72,41 +91,68 @@ impl Zone {
     }
 }
 pub const LineWidth: usize = 15;
-pub const HalfFieldLenght: usize = 13;
+pub const HalfFieldLength: usize = 13;
 
-pub type Coords = (usize, usize);
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
+pub struct Coords(usize, usize);
+
+impl Coords {
+    pub fn new(i: usize, j: usize) -> Coords {
+        Coords(i, j)
+    }
+    pub fn i(&self) -> usize {
+        self.0
+    }
+    pub fn j(&self) -> usize {
+        self.1
+    }
+}
+
+impl std::ops::Add<Coords> for Coords {
+    type Output = Coords;
+    fn add(self, rhs: Coords) -> Self::Output {
+        Coords(self.0 + rhs.0, self.1 + rhs.1)
+    }
+}
+impl std::ops::Add<(isize, isize)> for Coords {
+    type Output = Coords;
+    fn add(self, rhs: (isize, isize)) -> Self::Output {
+        match (
+            self.0.checked_add_signed(rhs.0),
+            self.1.checked_add_signed(rhs.1),
+        ) {
+            (None, None) | (None, Some(_)) | (Some(_), None) => self,
+            (Some(a), Some(b)) => Coords(a, b),
+        }
+    }
+}
 
 pub type Line = [Zone; LineWidth];
-pub struct HalfField([Line; HalfFieldLenght]);
+pub struct HalfField {
+    lines: [Line; HalfFieldLength],
+    out: Zone,
+}
 
 impl HalfField {
-    pub fn new(lines: [Line; HalfFieldLenght]) -> Self {
-        HalfField(lines)
+    pub fn new(lines: [Line; HalfFieldLength]) -> Self {
+        HalfField {
+            lines,
+            out: Zone::Out,
+        }
     }
 
     pub fn get_line(&self, i: usize) -> &Line {
-        &self.0[i]
+        &self.lines[i]
     }
     pub fn get_zone(&self, coords: &Coords) -> &Zone {
-        &self.0[coords.0][coords.1]
-    }
-
-    /**
-     * 0,1,2
-     * 3,x,4
-     * 5,6,7
-     */
-    pub fn get_neighbours(&self, coords: &Coords) -> [Zone; 8] {
-        [
-            Zone::Out,
-            Zone::Out,
-            Zone::Out,
-            Zone::Out,
-            Zone::Out,
-            Zone::Out,
-            Zone::Out,
-            Zone::Out,
-        ]
+        if coords.0 >= HalfFieldLength {
+            &self.out
+        } else if coords.1 >= LineWidth {
+            &self.out
+        } else {
+            println!("{:?} {} {} ", coords, HalfFieldLength, LineWidth);
+            &self.lines[coords.0][coords.1]
+        }
     }
 }
 
@@ -124,7 +170,7 @@ impl std::fmt::Display for Zone {
 impl std::fmt::Display for HalfField {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "|===============|\n")?;
-        for l in &self.0 {
+        for l in &self.lines {
             write!(f, "|")?;
             for z in l {
                 write!(f, "{}", z)?;
